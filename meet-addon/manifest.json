@@ -1,0 +1,20 @@
+{
+  "name": "TOTS Meet Assistant",
+  "version": "1.0.0",
+  "addOns": {
+    "meet": {
+      "homepageTrigger": {
+        "runFunction": "onHomepage",
+        "enabled": true
+      },
+      "conferenceSolution": {
+        "onCreateFunction": "onConferenceCreate",
+        "logoUrl": "https://axelcamiletti.github.io/tots-meet-assistant/meet-addon/logo.png",
+        "name": "TOTS Meet Assistant"
+      }
+    }
+  },
+  "urlFetchWhitelist": [
+    "https://axelcamiletti.github.io"
+  ]
+}
