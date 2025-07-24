@@ -61,9 +61,9 @@ export class GoogleMeetBot {
       // Verificar si la página sigue abierta
       console.log(`📊 [DEBUG] Página cerrada después de espera: ${this.page.isClosed()}`);
 
-      // Ejecutar la lógica de unión de Vexa
+      // Ejecutar la lógica de unión de Tots
       console.log('🔧 [DEBUG] Iniciando lógica de unión...');
-      await this.joinMeetingVexa();
+      await this.joinMeetingTots();
 
       // Esperar admisión a la reunión
       console.log('⏳ [DEBUG] Esperando admisión...');
@@ -78,11 +78,11 @@ export class GoogleMeetBot {
   }
 
   // Implementación exacta de joinMeeting de Vexa.ai
-  private async joinMeetingVexa(): Promise<void> {
-    console.log('🔧 [DEBUG] Iniciando joinMeetingVexa...');
+  private async joinMeetingTots(): Promise<void> {
+    console.log('🔧 [DEBUG] Iniciando joinMeetingTots...');
     
     // Verificar estado de la página al inicio
-    console.log(`📊 [DEBUG] Página cerrada al inicio de joinMeetingVexa: ${this.page.isClosed()}`);
+    console.log(`📊 [DEBUG] Página cerrada al inicio de joinMeetingTots: ${this.page.isClosed()}`);
     
     // Selectores que funcionan en inglés y español
     const enterNameField = 'input[type="text"][aria-label*="name"], input[type="text"][aria-label*="nombre"]';
