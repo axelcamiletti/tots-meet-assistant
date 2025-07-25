@@ -45,6 +45,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MeetingBot = void 0;
 const playwright_1 = require("playwright");
 const google_meet_1 = require("./platforms/google-meet");
+const google_meet_transcription_1 = require("./transcription/google-meet-transcription");
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 class MeetingBot {
@@ -53,6 +54,7 @@ class MeetingBot {
         this.browser = null;
         this.page = null;
         this.googleBot = null;
+        this.transcriptionBot = null;
         this.session = null;
         console.log('🤖 TOTS Notetaker Bot inicializando...');
     }
@@ -169,6 +171,8 @@ class MeetingBot {
                 yield this.googleBot.join();
                 this.session.status = 'joined';
                 console.log('✅ Bot unido a la reunión exitosamente');
+                // Inicializar transcripción
+                yield this.initializeTranscription();
                 // Comenzar a monitorear la reunión
                 yield this.startMeetingMonitoring();
             }
@@ -176,6 +180,30 @@ class MeetingBot {
                 this.session.status = 'error';
                 console.error('❌ Error uniéndose a Google Meet:', error);
                 throw error;
+            }
+        });
+    }
+    initializeTranscription() {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.page)
+                throw new Error('Page no inicializada');
+            console.log('🎤 Inicializando sistema de transcripción...');
+            try {
+                this.transcriptionBot = new google_meet_transcription_1.GoogleMeetTranscription(this.page, {
+                    enableAutomatic: true,
+                    enableLiveCaption: true,
+                    language: 'es-ES',
+                    interval: 2000
+                });
+                yield this.transcriptionBot.startTranscription();
+                if (this.session) {
+                    this.session.status = 'recording';
+                }
+                console.log('✅ Sistema de transcripción iniciado');
+            }
+            catch (error) {
+                console.error('❌ Error inicializando transcripción:', error);
+                // No lanzar error para que el bot pueda continuar sin transcripción
             }
         });
     }
@@ -195,25 +223,33 @@ class MeetingBot {
                     console.error('Error obteniendo participantes:', error);
                 }
             }), 30000);
-            // Monitorear si la reunión sigue activa
+            // Monitorear si la reunión sigue activa (con menos frecuencia para evitar interferencia)
             setInterval(() => __awaiter(this, void 0, void 0, function* () {
                 try {
+                    console.log('🔍 [BOT] Verificando estado de la reunión...');
                     const isActive = yield this.googleBot.isMeetingActive();
+                    console.log(`📊 [BOT] Reunión activa: ${isActive}`);
                     if (!isActive && this.session.status !== 'ended') {
-                        console.log('📞 Reunión terminada');
+                        console.log('📞 [BOT] Reunión terminada detectada');
                         yield this.endSession();
+                    }
+                    else if (isActive) {
+                        console.log('✅ [BOT] Reunión sigue activa');
                     }
                 }
                 catch (error) {
-                    console.error('Error verificando estado de la reunión:', error);
+                    console.error('⚠️ [BOT] Error verificando estado de la reunión:', error);
+                    // No terminar la sesión por errores de verificación
                 }
-            }), 10000);
-            // Simular transcripción (por ahora solo logs)
+            }), 30000); // Cambiar de 10 segundos a 30 segundos
+            // Actualizar transcripciones cada minuto
             setInterval(() => {
-                if (this.session && this.session.status === 'joined') {
-                    const mockTranscript = `[${new Date().toISOString()}] Transcripción en progreso...`;
-                    this.session.transcription.push(mockTranscript);
-                    console.log('📝 ' + mockTranscript);
+                if (this.session && this.session.status === 'recording' && this.transcriptionBot) {
+                    const newTranscriptions = this.transcriptionBot.getTranscriptions();
+                    this.session.transcription = newTranscriptions;
+                    // Mostrar estadísticas de transcripción
+                    const stats = this.transcriptionBot.getStats();
+                    console.log(`📝 Transcripción: ${stats.totalEntries} entradas, ${stats.uniqueSpeakers} hablantes`);
                 }
             }, 60000);
         });
@@ -225,6 +261,15 @@ class MeetingBot {
                 this.session.endTime = new Date();
                 console.log(`📋 Sesión finalizada: ${this.session.id}`);
                 console.log(`⏱️ Duración: ${this.session.endTime.getTime() - this.session.startTime.getTime()}ms`);
+                // Detener transcripción y obtener resumen final
+                if (this.transcriptionBot) {
+                    yield this.transcriptionBot.stopTranscription();
+                    const summary = this.transcriptionBot.getTranscriptionSummary();
+                    console.log(`📊 Resumen de transcripción: ${summary.totalEntries} entradas, ${summary.speakers.length} hablantes`);
+                    // Exportar transcripción final
+                    const transcriptionText = this.transcriptionBot.exportToText();
+                    console.log('📄 Transcripción completa disponible');
+                }
             }
             yield this.cleanup();
         });
@@ -233,6 +278,11 @@ class MeetingBot {
         return __awaiter(this, void 0, void 0, function* () {
             console.log('🧹 Limpiando recursos...');
             try {
+                // Detener transcripción
+                if (this.transcriptionBot && this.transcriptionBot.isTranscribing()) {
+                    yield this.transcriptionBot.stopTranscription();
+                    console.log('✅ Transcripción detenida');
+                }
                 if (this.page) {
                     yield this.page.close();
                     this.page = null;
@@ -268,6 +318,45 @@ class MeetingBot {
     stop() {
         return __awaiter(this, void 0, void 0, function* () {
             yield this.endSession();
+        });
+    }
+    // Métodos públicos para transcripción
+    getTranscriptions() {
+        var _a;
+        return ((_a = this.transcriptionBot) === null || _a === void 0 ? void 0 : _a.getTranscriptions()) || [];
+    }
+    getTranscriptionSummary() {
+        var _a;
+        return ((_a = this.transcriptionBot) === null || _a === void 0 ? void 0 : _a.getTranscriptionSummary()) || null;
+    }
+    getTranscriptionStats() {
+        var _a;
+        return ((_a = this.transcriptionBot) === null || _a === void 0 ? void 0 : _a.getStats()) || null;
+    }
+    exportTranscriptionToText() {
+        var _a;
+        return ((_a = this.transcriptionBot) === null || _a === void 0 ? void 0 : _a.exportToText()) || 'No hay transcripciones disponibles';
+    }
+    toggleTranscription(enable) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.transcriptionBot) {
+                console.log('⚠️ Sistema de transcripción no inicializado');
+                return;
+            }
+            if (enable && !this.transcriptionBot.isTranscribing()) {
+                yield this.transcriptionBot.startTranscription();
+                if (this.session) {
+                    this.session.status = 'recording';
+                }
+                console.log('✅ Transcripción habilitada');
+            }
+            else if (!enable && this.transcriptionBot.isTranscribing()) {
+                yield this.transcriptionBot.stopTranscription();
+                if (this.session) {
+                    this.session.status = 'joined';
+                }
+                console.log('⏸️ Transcripción pausada');
+            }
         });
     }
 }

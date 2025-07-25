@@ -179,6 +179,20 @@ export class GoogleMeetBot {
       
       await this.page.click(joinButton);
       console.log(`🚀 [DEBUG] Clic en botón de unirse ejecutado - ${this.config.botName} intentando unirse...`);
+      
+      // Esperar un momento después del clic y verificar estado
+      await this.page.waitForTimeout(3000);
+      console.log(`📊 [DEBUG] Estado de página después del clic de unirse: cerrada=${this.page.isClosed()}`);
+      console.log(`🌐 [DEBUG] URL después del clic de unirse: ${this.page.url()}`);
+      
+      // Tomar screenshot después del clic para ver qué pasó
+      try {
+        await this.page.screenshot({ path: 'debug-after-join-click.png' });
+        console.log('📸 [DEBUG] Screenshot después del clic guardado: debug-after-join-click.png');
+      } catch (screenshotError) {
+        console.error(`❌ [DEBUG] Error tomando screenshot después del clic: ${screenshotError}`);
+      }
+      
     } catch (error) {
       console.error(`❌ [DEBUG] Error con botón de unirse: ${error}`);
       
@@ -204,49 +218,119 @@ export class GoogleMeetBot {
   // Función de espera de admisión de Vexa
   private async waitForMeetingAdmission(): Promise<boolean> {
     console.log('⏳ [DEBUG] Iniciando espera de admisión...');
-    const leaveButton = `//button[@aria-label="Leave call"]`;
+    const leaveButton = `button[aria-label="Leave call"]`;
     console.log(`🎯 [DEBUG] Buscando botón de salir: ${leaveButton}`);
     
     // Verificar estado de la página
     console.log(`📊 [DEBUG] Página cerrada al inicio de waitForMeetingAdmission: ${this.page.isClosed()}`);
     
-    try {
-      console.log('⏰ [DEBUG] Esperando hasta 5 minutos para ser admitido...');
-      // Vexa espera hasta 5 minutos para ser admitido
-      await this.page.waitForSelector(leaveButton, { timeout: 300000 });
-      console.log('✅ [DEBUG] Botón de salir encontrado - Admitido exitosamente en la reunión');
-      return true;
-    } catch (error) {
-      console.error(`❌ [DEBUG] Error en waitForMeetingAdmission: ${error}`);
-      
-      // Tomar screenshot final para debug
+    // Búsqueda activa en loop en lugar de waitForSelector pasivo
+    const maxAttempts = 300; // 5 minutos (300 intentos de 1 segundo cada uno)
+    console.log(`⏰ [DEBUG] Iniciando búsqueda activa por ${maxAttempts} segundos...`);
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        await this.page.screenshot({ path: 'debug-admission-failed.png' });
-        console.log('📸 [DEBUG] Screenshot de fallo de admisión guardado: debug-admission-failed.png');
-      } catch (screenshotError) {
-        console.error(`❌ [DEBUG] Error tomando screenshot final: ${screenshotError}`);
-      }
-      
-      // Buscar indicadores de sala de espera o errores
-      try {
-        const waitingRoom = await this.page.$('text="Waiting for the meeting host"');
-        if (waitingRoom) {
-          console.log('⏰ [DEBUG] El bot está en sala de espera');
+        console.log(`🔍 [DEBUG] Intento ${attempt}/${maxAttempts} - Buscando botón Leave call...`);
+        
+        // Verificar si la página sigue abierta
+        if (this.page.isClosed()) {
+          console.error('❌ [DEBUG] La página se cerró durante la búsqueda');
+          throw new Error('Página cerrada durante búsqueda de admisión');
         }
         
-        const errorMessages = await this.page.$$('text="can\'t join this video call"');
-        if (errorMessages.length > 0) {
-          console.log('❌ [DEBUG] Mensaje de error detectado: No se puede unir a la videollamada');
+        // Buscar el botón con múltiples selectores
+        const leaveButtonElement = await this.page.$(`button[aria-label="Leave call"]`);
+        if (leaveButtonElement) {
+          console.log('✅ [DEBUG] ¡Botón de salir encontrado! - Admitido exitosamente en la reunión');
+          return true;
         }
         
-        const currentUrl = this.page.url();
-        console.log(`🌐 [DEBUG] URL actual durante error de admisión: ${currentUrl}`);
-      } catch (debugError) {
-        console.error(`❌ [DEBUG] Error en debugging de admisión: ${debugError}`);
+        // También buscar por el texto del icono
+        const leaveByIcon = await this.page.$(`button:has(i[aria-hidden="true"]:text("call_end"))`);
+        if (leaveByIcon) {
+          console.log('✅ [DEBUG] ¡Botón de salir encontrado por icono! - Admitido exitosamente en la reunión');
+          return true;
+        }
+        
+        // Buscar por jsname específico del HTML que proporcionaste
+        const leaveByJsname = await this.page.$(`button[jsname="CQylAd"]`);
+        if (leaveByJsname) {
+          console.log('✅ [DEBUG] ¡Botón de salir encontrado por jsname! - Admitido exitosamente en la reunión');
+          return true;
+        }
+        
+        // También buscar botones alternativos con "Leave"
+        const leaveButtonAlt = await this.page.$(`button[aria-label*="Leave"]`);
+        if (leaveButtonAlt) {
+          const ariaLabel = await leaveButtonAlt.getAttribute('aria-label');
+          console.log(`✅ [DEBUG] ¡Botón de salir alternativo encontrado! aria-label: "${ariaLabel}"`);
+          return true;
+        }
+        
+        // Debug: mostrar todos los botones cada 30 intentos
+        if (attempt % 30 === 0) {
+          console.log(`🔍 [DEBUG] Intento ${attempt} - Listando todos los botones disponibles:`);
+          try {
+            const allButtons = await this.page.$$('button');
+            console.log(`📊 [DEBUG] Total de botones encontrados: ${allButtons.length}`);
+            
+            for (let i = 0; i < Math.min(allButtons.length, 15); i++) {
+              const button = allButtons[i];
+              const text = await button.textContent();
+              const ariaLabel = await button.getAttribute('aria-label');
+              const isVisible = await button.isVisible();
+              console.log(`🔘 [DEBUG] Botón ${i + 1}: text="${text?.trim()}", aria-label="${ariaLabel}", visible=${isVisible}`);
+            }
+          } catch (debugError) {
+            console.error(`❌ [DEBUG] Error listando botones: ${debugError}`);
+          }
+        }
+        
+        // Esperar 1 segundo antes del siguiente intento
+        await this.page.waitForTimeout(1000);
+        
+      } catch (searchError) {
+        console.error(`❌ [DEBUG] Error en intento ${attempt}: ${searchError}`);
+        
+        if (attempt >= maxAttempts) {
+          throw searchError;
+        }
+        
+        // Esperar un poco más en caso de error
+        await this.page.waitForTimeout(2000);
       }
-      
-      throw new Error('Bot no fue admitido en la reunión dentro del tiempo límite');
     }
+    
+    // Si llegamos aquí, no se encontró el botón después de todos los intentos
+    console.error(`❌ [DEBUG] No se encontró el botón Leave call después de ${maxAttempts} intentos`);
+    
+    // Tomar screenshot final para debug
+    try {
+      await this.page.screenshot({ path: 'debug-admission-failed.png' });
+      console.log('📸 [DEBUG] Screenshot de fallo de admisión guardado: debug-admission-failed.png');
+    } catch (screenshotError) {
+      console.error(`❌ [DEBUG] Error tomando screenshot final: ${screenshotError}`);
+    }
+    
+    // Buscar indicadores de sala de espera o errores
+    try {
+      const waitingRoom = await this.page.$('text="Waiting for the meeting host"');
+      if (waitingRoom) {
+        console.log('⏰ [DEBUG] El bot está en sala de espera');
+      }
+      
+      const errorMessages = await this.page.$$('text="can\'t join this video call"');
+      if (errorMessages.length > 0) {
+        console.log('❌ [DEBUG] Mensaje de error detectado: No se puede unir a la videollamada');
+      }
+      
+      const currentUrl = this.page.url();
+      console.log(`🌐 [DEBUG] URL actual durante error de admisión: ${currentUrl}`);
+    } catch (debugError) {
+      console.error(`❌ [DEBUG] Error en debugging de admisión: ${debugError}`);
+    }
+    
+    throw new Error('Bot no fue admitido en la reunión dentro del tiempo límite');
   }
 
   // Métodos adicionales para compatibilidad
@@ -274,10 +358,73 @@ export class GoogleMeetBot {
 
   async isMeetingActive(): Promise<boolean> {
     try {
-      const leaveButton = await this.page.$(`//button[@aria-label="Leave call"]`);
-      return leaveButton !== null;
-    } catch {
-      return false;
+      console.log('🔍 [MEETING] Verificando si la reunión está activa...');
+      
+      // Verificar si la página sigue abierta
+      if (this.page.isClosed()) {
+        console.log('❌ [MEETING] Página cerrada - reunión terminada');
+        return false;
+      }
+      
+      // Verificar múltiples indicadores de que la reunión está activa
+      const activeIndicators = [
+        '//button[@aria-label="Leave call"]',
+        '//button[@aria-label="Salir de la llamada"]',
+        '[aria-label="Leave call"]',
+        '[aria-label="Salir de la llamada"]',
+        '[data-tooltip="Leave call"]',
+        '[data-tooltip="Salir de la llamada"]'
+      ];
+      
+      for (const selector of activeIndicators) {
+        try {
+          const element = await this.page.$(selector);
+          if (element) {
+            console.log(`✅ [MEETING] Reunión activa - indicador encontrado: ${selector}`);
+            return true;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      // Si no encontramos indicadores, verificar si estamos en una página de error o redirección
+      const currentUrl = this.page.url();
+      console.log(`🌐 [MEETING] URL actual: ${currentUrl}`);
+      
+      if (!currentUrl.includes('meet.google.com')) {
+        console.log('❌ [MEETING] No estamos en Google Meet - reunión terminada');
+        return false;
+      }
+      
+      // Verificar si hay mensajes de error o reunión terminada
+      const errorSelectors = [
+        'text="The meeting has ended"',
+        'text="La reunión ha terminado"',
+        'text="You left the meeting"',
+        'text="Saliste de la reunión"',
+        '[role="dialog"]:has-text("ended")',
+        '[role="dialog"]:has-text("terminado")'
+      ];
+      
+      for (const selector of errorSelectors) {
+        try {
+          const errorElement = await this.page.$(selector);
+          if (errorElement) {
+            console.log(`❌ [MEETING] Reunión terminada - mensaje encontrado: ${selector}`);
+            return false;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      console.log('⚠️ [MEETING] No se pudo determinar el estado de la reunión - asumiendo activa');
+      return true; // Ser conservador y asumir que está activa si no podemos determinar
+      
+    } catch (error) {
+      console.log(`⚠️ [MEETING] Error verificando estado de reunión: ${error}`);
+      return true; // Ser conservador en caso de error
     }
   }
 
