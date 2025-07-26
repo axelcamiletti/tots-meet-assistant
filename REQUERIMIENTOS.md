@@ -148,20 +148,78 @@ TOTS Meet Assistant es un bot automatizado para Google Meet que proporciona tran
 - Desarrollar sistema de post-procesamiento para optimizar archivos
 - Crear exportador multi-formato con metadatos temporales
 
+### 🎥 Sistema de Grabación de Reuniones
+**Qué debe hacer:**
+- Grabar automáticamente las reuniones a través del Bot usando Playwright
+- Capturar audio y video de alta calidad durante la transcripción
+- Generar archivos de grabación sincronizados con las transcripciones
+- Proporcionar controles de inicio/parada de grabación desde el frontend
+- Servir archivos grabados desde el backend para reproducción en dashboard
+- Gestionar almacenamiento local con estructura organizada de archivos
+
+**Workflow de Usuario:**
+1. Usuario activa Chrome Extension en Google Meet
+2. Extension envía invitación al Bot con URL de reunión
+3. Bot se une automáticamente y comienza grabación + transcripción
+4. Archivos se guardan localmente en servidor con timestamps sincronizados
+5. Backend sirve archivos grabados como endpoints HTTP para frontend
+6. Dashboard permite reproducir videos/audios directamente desde archivos locales
+
+**Estrategia de implementación:**
+- **Chrome Extension Integration**: Modificar extension para enviar URLs de reunión al backend
+- **Bot Recording**: Usar Playwright para grabar audio/video durante participación en Meet
+- **Local Storage System**: Almacenar archivos en estructura organizada en filesystem local
+- **File Serving Backend**: Crear endpoints para servir archivos grabados como streaming HTTP
+- **Frontend Player**: Integrar reproductor de video/audio en dashboard que consuma endpoints
+- **Timestamp Synchronization**: Sincronizar perfectamente grabación con transcripción en tiempo real
+
+**Arquitectura de Almacenamiento Local:**
+```
+📁 recordings/
+  📁 2025-01-26/
+    📁 meeting-abc123/
+      🎥 recording.mp4     # Video completo de la reunión
+      🎵 audio.mp3         # Audio extraído/optimizado
+      📄 transcript.json   # Transcripción con timestamps
+      📊 metadata.json     # Información de la reunión
+```
+
+**Características técnicas:**
+- **Grabación Multi-formato**: Audio MP3 + Video MP4 simultáneos
+- **Sincronización Precisa**: Timestamps exactos entre transcripción y grabación
+- **Almacenamiento Local**: Filesystem del servidor, no base de datos
+- **Serving de Archivos**: Endpoints HTTP para streaming de media files
+- **Calidad Configurable**: Opciones de resolución y bitrate
+- **Procesamiento Post-Grabación**: Compresión automática para optimizar tamaño
+- **Frontend Integration**: Reproductor integrado en dashboard con controles temporales
+- **Chrome Extension Workflow**: Invitación automática del bot desde Meet interface
+
+**Endpoints de Backend:**
+- `GET /api/recordings/:meetingId/video` - Servir archivo MP4
+- `GET /api/recordings/:meetingId/audio` - Servir archivo MP3
+- `GET /api/recordings/:meetingId/metadata` - Información de la grabación
+- `POST /api/meetings/invite-bot` - Endpoint para Chrome Extension
+
 ## 🚀 Roadmap de Desarrollo
 
-### Fase 2a - Navegación Temporal y Mejoras Core (2-3 meses)
+### Fase 2a - Sistema de Grabación y Mejoras Core (2-3 meses)
 **Prioridad Alta - Funcionalidades Críticas para Adopción**
+- **Implementar sistema de grabación completo**: Chrome Extension → Bot → Local Storage → Frontend Player
+- **Chrome Extension Integration**: Modificar extension para invitar bot automáticamente
+- **Local File Storage**: Sistema de almacenamiento en filesystem local con endpoints HTTP
+- **Frontend Video Player**: Reproductor integrado en dashboard para archivos grabados
 - Implementar marcas de tiempo sincronizadas en transcripción
 - Desarrollar navegación bidireccional video ↔ transcripción
 - Crear sistema de filtrado inteligente de ruido
 - Mejorar algoritmos de generación de resúmenes y próximos pasos
 
-### Fase 2b - Interacción y Traducción (1-2 meses)
-**Funcionalidades de Usabilidad**
+### Fase 2b - Navegación Temporal y Optimización (1-2 meses)
+**Funcionalidades de Usabilidad Avanzada**
+- **Navegación Temporal**: Click en transcripción salta a momento exacto en video
+- **Controles de Grabación**: Botones start/stop desde dashboard con estados en tiempo real
 - Sistema de comandos vocales ("Notetaker, anotá...")
 - Traducción automática inglés → español en tiempo real
-- Búsqueda avanzada en transcripciones
+- Búsqueda avanzada en transcripciones con timestamps
 - Mejoras de formato según feedback (estructura reorganizada)
 
 ### Fase 2c - Memoria y Contexto (2-3 meses)
@@ -172,19 +230,28 @@ TOTS Meet Assistant es un bot automatizado para Google Meet que proporciona tran
 - Planificación inteligente con sugerencias de agenda
 
 ### Fase 3 - Optimización y Expansión (2-3 meses)
-**Mejoras Avanzadas**
-- Grabación mejorada multi-formato
-- Dashboard de gestión de reuniones
-- APIs para integraciones externas
-- Métricas de productividad y análisis
+**Mejoras Avanzadas y Migración Cloud**
+- **Migración a Cloud Storage**: AWS S3 o Google Cloud para almacenamiento escalable
+- **Grabación multi-formato avanzada**: Pantalla compartida, múltiples calidades, streaming
+- Dashboard de gestión avanzado de reuniones con analytics
+- APIs para integraciones externas (Calendar, Slack, etc.)
+- Sistema de post-procesamiento con IA para highlights automáticos
 
 ---
 
 ## 🎯 Próximos Pasos Inmediatos
 
-1. **Validar feedback con más usuarios** - Confirmar prioridades identificadas
-2. **Prototipo de navegación temporal** - Demostrar viabilidad técnica
-3. **Seleccionar stack tecnológico** - APIs de traducción, base de datos, etc.
-4. **Definir arquitectura de datos** - Estructura para memoria entre reuniones
+1. **Implementar sistema de grabación local** - Modificar bot para capturar audio/video con Playwright
+2. **Chrome Extension Integration** - Agregar funcionalidad para invitar bot desde Meet interface
+3. **Backend File Serving** - Crear endpoints para servir archivos grabados como HTTP streams
+4. **Frontend Video Player** - Integrar reproductor en dashboard que consuma endpoints locales
+5. **Timestamp Synchronization** - Sincronizar perfectamente grabación con transcripción
+6. **Local Storage Architecture** - Implementar estructura de archivos organizada en filesystem
 
-El roadmap se enfoca primero en las funcionalidades que más impacto tendrán en la adopción diaria, basándose directamente en el feedback recibido de usuarios reales.
+**Decisiones Técnicas Confirmadas:**
+- ✅ **Almacenamiento Local**: Filesystem local para MVP, migración a cloud en Fase 3
+- ✅ **Serving Strategy**: Backend endpoints HTTP para streaming de archivos a frontend
+- ✅ **Integration Workflow**: Chrome Extension → Backend API → Bot Invitation → Recording
+- ✅ **File Organization**: Estructura por fecha/meeting con metadata JSON
+
+El roadmap se enfoca primero en el sistema de grabación básico con almacenamiento local, validando la funcionalidad antes de migrar a soluciones cloud más complejas.
