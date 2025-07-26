@@ -7,7 +7,8 @@
     "build": "tsc",
     "start": "node dist/bot.js",
     "dev": "ts-node src/bot.ts",
-    "test": "ts-node src/test.ts"
+    "test": "npm run build && node dist/tests/test.js",
+    "test:quick": "npm run build && node dist/tests/test.js --quick"
   },
   "dependencies": {
     "playwright": "^1.40.0",
