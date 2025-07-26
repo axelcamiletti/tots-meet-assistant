@@ -1,0 +1,108 @@
+@if (selectedMeeting()) {
+  <div class="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 h-full overflow-hidden">
+    <!-- Header with gradient -->
+    <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-6">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-4 w-full">
+          <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 13V5a2 2 0 00-2-2H4a2 2 0 00-2 2v8a2 2 0 002 2h3l3 3 3-3h3a2 2 0 002-2zM5 7a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1zm1 3a1 1 0 100 2h3a1 1 0 100-2H6z" clip-rule="evenodd"></path>
+            </svg>
+          </div>
+          <div class="flex-1">
+            <h2 class="text-2xl font-bold text-white">{{ selectedMeeting()!.title }}</h2>
+            <p class="text-indigo-100 text-sm font-medium mt-1">Transcripciones de la reunión</p>
+            <div class="flex items-center space-x-2 mt-2">
+              <div class="px-3 py-1 bg-white/20 rounded-full">
+                <p class="text-xs text-white font-mono">ID: {{ selectedMeeting()!.meet_id || 'N/A' }}</p>
+              </div>
+            </div>
+            <!-- Participantes -->
+            @if (getUniqueSpeakers().length > 0) {
+              <div class="flex flex-wrap gap-2 mt-3">
+                <p class="text-indigo-200 text-xs font-medium mb-2">Participantes:</p>
+                @for (speaker of getUniqueSpeakers(); track speaker) {
+                  <div class="flex items-center space-x-2 bg-white/20 rounded-full px-3 py-1">
+                    <div class="w-4 h-4 rounded-full border border-white/30"
+                        [style.background]="getSpeakerColor(speaker)"></div>
+                    <span class="text-white text-xs font-medium truncate">{{ speaker }}</span>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="p-8 h-full overflow-y-auto" style="max-height: calc(100vh - 300px);">
+      @if (transcriptionsLoading()) {
+        <div class="flex flex-col items-center justify-center py-16">
+          <div class="relative">
+            <div class="w-12 h-12 border-4 border-indigo-200 rounded-full animate-spin border-t-indigo-600"></div>
+            <div class="absolute inset-0 w-12 h-12 border-4 border-transparent rounded-full animate-ping border-t-indigo-400"></div>
+          </div>
+          <p class="text-gray-600 font-medium mt-4">Cargando transcripciones...</p>
+        </div>
+      }
+
+      @if (!transcriptionsLoading() && transcriptions().length === 0) {
+        <div class="text-center py-16">
+          <div class="w-24 h-24 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg class="w-12 h-12 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 13V5a2 2 0 00-2-2H4a2 2 0 00-2 2v8a2 2 0 002 2h3l3 3 3-3h3a2 2 0 002-2zM5 7a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1zm1 3a1 1 0 100 2h3a1 1 0 100-2H6z" clip-rule="evenodd"></path>
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 mb-2">No hay transcripciones</h3>
+          <p class="text-gray-600 mb-1">No hay transcripciones para esta reunión</p>
+          <p class="text-sm text-gray-500">Las transcripciones aparecerán aquí cuando el bot esté activo</p>
+        </div>
+      }
+
+      @if (!transcriptionsLoading() && transcriptions().length > 0) {
+        <div class="space-y-3">
+          @for (transcription of transcriptions(); track transcription.id; let i = $index) {
+            <div class="group relative">
+              <!-- Message bubble with dynamic colors -->
+              <div class="flex gap-4">
+                <!-- Timestamp with speaker color -->
+                <div class="flex flex-col items-center min-w-0">
+                  <p class="text-xs text-indigo-500 font-medium cursor-pointer hover:underline mt-1">
+                    {{ formatTime(transcription.timestamp) }}
+                  </p>
+                </div>
+
+                <!-- Message content with colored border -->
+                <div class="flex-1 min-w-0">
+                  <div class="border-l-3 pl-4 rounded-r-lg" [style.border-left-color]="getSpeakerColor(transcription.speaker_name)">
+                    <p class="text-gray-800 leading-relaxed"><b>{{ transcription.speaker_name }}:</b> {{ transcription.text }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+} @else {
+  <div class="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 h-full flex items-center justify-center">
+    <div class="text-center">
+      <div class="w-28 h-28 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+        <svg class="w-14 h-14 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"></path>
+        </svg>
+      </div>
+      <h3 class="text-2xl font-bold text-gray-900 mb-3">Selecciona una reunión</h3>
+      <p class="text-gray-600 font-medium">Haz clic en una reunión de la lista para ver sus transcripciones</p>
+      <div class="mt-6">
+        <div class="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-full border border-blue-200">
+          <svg class="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+          </svg>
+          <span class="text-sm text-blue-700 font-medium">Tip: Selecciona una reunión para comenzar</span>
+        </div>
+      </div>
+    </div>
+  </div>
+}
