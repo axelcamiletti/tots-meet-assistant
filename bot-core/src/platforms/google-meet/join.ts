@@ -1,357 +1,237 @@
+/**
+ * Google Meet - Lógica de unión a reuniones
+ */
+
 import { Page } from 'playwright';
 import { BotConfig } from '../../types/bot.types';
 
 export class GoogleMeetJoinModule {
-  constructor(
-    private page: Page,
-    private config: BotConfig
-  ) {}
+  constructor(private page: Page, private config: BotConfig) {}
 
   async joinMeeting(): Promise<void> {
+    return joinGoogleMeet(this.page, this.config.meetingUrl);
+  }
+}
+
+export async function joinGoogleMeet(page: Page, meetingUrl: string): Promise<void> {
+  console.log('🔗 Iniciando proceso de unión a Google Meet...');
+  
+  try {
+    // 1. Navegar a la URL de la reunión
     console.log('🔗 Conectando a Google Meet...');
+    await page.goto(meetingUrl, { 
+      waitUntil: 'networkidle',
+      timeout: 30000 
+    });
+
+    // 2. Esperar a que cargue la página
+    console.log('📄 Página cargada, esperando controles...');
+    await page.waitForTimeout(3000);
+
+    // 3. Configurar audio y video
+    await configureAudioVideo(page);
+
+    // 4. Configurar nombre
+    await configureName(page);
+
+    // 5. Unirse a la reunión
+    await clickJoinButton(page);
+
+    // 6. Esperar confirmación de que estamos en la reunión
+    await waitForJoinConfirmation(page);
+
+    console.log('✅ Unido a Google Meet exitosamente');
+
+  } catch (error) {
+    console.error('❌ Error uniéndose a Google Meet:', error);
+    throw error;
+  }
+}
+
+async function configureAudioVideo(page: Page): Promise<void> {
+  console.log('🎛️ Configurando audio y video...');
+  
+  try {
+    // Desactivar micrófono si está activo
+    const micButton = page.locator('[data-is-muted="false"][aria-label*="micrófono"], [data-is-muted="false"][aria-label*="microphone"], button[aria-label*="Desactivar micrófono"], button[aria-label*="Turn off microphone"]');
+    if (await micButton.isVisible({ timeout: 2000 })) {
+      await micButton.click();
+      console.log('🔇 Micrófono desactivado');
+    }
+
+    // Desactivar cámara si está activa
+    const cameraButton = page.locator('[data-is-muted="false"][aria-label*="cámara"], [data-is-muted="false"][aria-label*="camera"], button[aria-label*="Desactivar cámara"], button[aria-label*="Turn off camera"]');
+    if (await cameraButton.isVisible({ timeout: 2000 })) {
+      await cameraButton.click();
+      console.log('📹 Cámara desactivada');
+    }
+
+    console.log('✅ Audio y video configurados');
+  } catch (error) {
+    console.log('⚠️ No se pudieron configurar audio/video automáticamente');
+  }
+}
+
+async function configureName(page: Page): Promise<void> {
+  console.log('👤 Configurando nombre...');
+  
+  try {
+    // Buscar campo de nombre
+    const nameInput = page.locator('input[placeholder*="nombre"], input[placeholder*="name"], input[aria-label*="nombre"], input[aria-label*="name"]');
     
-    try {
-      // Navegar a la URL de la reunión
-      await this.page.goto(this.config.meetingUrl, { 
-        waitUntil: 'networkidle',
-        timeout: 30000 
-      });
-
-      console.log('📄 Página cargada, esperando controles...');
-
-      // Esperar a que la página esté lista
-      await this.page.waitForTimeout(3000);
-
-      // Configurar audio y video antes de unirse
-      await this.configureAudioVideo();
-
-      // Configurar nombre si es necesario
-      await this.configureName();
-
-      // Esperar y hacer clic en "Join now" o "Unirse ahora"
-      await this.clickJoinButton();
-
-      // Esperar confirmación de que se unió a la reunión
-      await this.waitForJoinConfirmation();
-
-      console.log('✅ Unido a Google Meet exitosamente');
-    } catch (error) {
-      console.error('❌ Error uniéndose a Google Meet:', error);
-      throw error;
-    }
-  }
-
-  private async configureAudioVideo(): Promise<void> {
-    try {
-      console.log('🎛️ Configurando audio y video...');
-
-      // Selectores modernos para Google Meet (2024-2025)
-      const micSelectors = [
-        '[data-is-muted]', // Selector moderno principal
-        'div[role="button"][aria-label*="microphone" i]',
-        'div[role="button"][aria-label*="micrófono" i]',
-        'button[aria-label*="microphone" i]',
-        'button[aria-label*="micrófono" i]',
-        '[jsname="BOHaEe"]', // Selector específico conocido
-        'div[data-tooltip*="Turn on microphone" i]',
-        'div[data-tooltip*="Turn off microphone" i]'
-      ];
-
-      const camSelectors = [
-        'div[role="button"][aria-label*="camera" i]',
-        'div[role="button"][aria-label*="cámara" i]', 
-        'button[aria-label*="camera" i]',
-        'button[aria-label*="cámara" i]',
-        '[jsname="I5Fjmd"]', // Selector específico conocido
-        'div[data-tooltip*="Turn on camera" i]',
-        'div[data-tooltip*="Turn off camera" i]'
-      ];
-
-      // Intentar configurar micrófono
-      if (!this.config.audioEnabled) {
-        await this.toggleControl(micSelectors, false, 'micrófono');
-      }
-
-      // Intentar configurar cámara
-      if (!this.config.videoEnabled) {
-        await this.toggleControl(camSelectors, false, 'cámara');
-      }
-
-      console.log('✅ Audio y video configurados');
-    } catch (error) {
-      console.log('⚠️ No se pudieron configurar audio/video automáticamente:', (error as Error).message);
-      console.log('   Continuando sin configuración automática...');
-    }
-  }
-
-  private async toggleControl(selectors: string[], enable: boolean, controlName: string): Promise<void> {
-    for (const selector of selectors) {
-      try {
-        const elements = await this.page.$$(selector);
-        
-        for (const element of elements) {
-          // Verificar si es el control correcto
-          const ariaLabel = await element.getAttribute('aria-label');
-          const dataTooltip = await element.getAttribute('data-tooltip');
-          
-          if (ariaLabel?.toLowerCase().includes(controlName.toLowerCase()) || 
-              dataTooltip?.toLowerCase().includes(controlName.toLowerCase())) {
-            
-            // Verificar estado actual
-            const isMuted = await element.getAttribute('data-is-muted') === 'true' ||
-                           ariaLabel?.toLowerCase().includes('turn on') ||
-                           dataTooltip?.toLowerCase().includes('turn on');
-            
-            const shouldClick = (enable && isMuted) || (!enable && !isMuted);
-            
-            if (shouldClick) {
-              await element.click();
-              console.log(`   ✓ ${controlName} ${enable ? 'activado' : 'desactivado'}`);
-              return;
-            }
-          }
-        }
-      } catch (error) {
-        // Continuar con el siguiente selector
-        continue;
-      }
-    }
-    
-    console.log(`   ⚠️ No se pudo configurar ${controlName} automáticamente`);
-  }
-
-  private async configureName(): Promise<void> {
-    try {
-      console.log('👤 Configurando nombre...');
-
-      // Selectores para el campo de nombre
-      const nameSelectors = [
-        'input[placeholder*="name" i]',
-        'input[placeholder*="nombre" i]',
-        'input[aria-label*="name" i]',
-        'input[aria-label*="nombre" i]',
-        '[jsname="YPqjbf"]', // Selector específico conocido
-        'input[type="text"]'
-      ];
-
-      for (const selector of nameSelectors) {
-        try {
-          const nameInput = await this.page.$(selector);
-          if (nameInput) {
-            // Verificar si el campo está visible y es editable
-            const isVisible = await nameInput.isVisible();
-            const isEditable = await nameInput.isEditable();
-            
-            if (isVisible && isEditable) {
-              await nameInput.click({ clickCount: 3 }); // Seleccionar todo
-              await nameInput.type(this.config.botName);
-              console.log(`   ✓ Nombre configurado: ${this.config.botName}`);
-              return;
-            }
-          }
-        } catch (error) {
-          continue;
-        }
-      }
-      
+    if (await nameInput.isVisible({ timeout: 3000 })) {
+      await nameInput.fill('TOTS Bot Assistant');
+      console.log('✅ Nombre configurado: TOTS Bot Assistant');
+    } else {
       console.log('   ⚠️ No se encontró campo de nombre editable');
-    } catch (error) {
-      console.log('   ⚠️ Error configurando nombre:', (error as Error).message);
     }
+  } catch (error) {
+    console.log('   ⚠️ Error configurando nombre:', error instanceof Error ? error.message : String(error));
   }
+}
 
-  private async clickJoinButton(): Promise<void> {
-    console.log('🔘 Buscando botón para unirse...');
-
-    // Selectores modernos para el botón de unirse
-    const joinSelectors = [
-      'div[role="button"]:has-text("Join now")',
-      'div[role="button"]:has-text("Unirse ahora")', 
-      'button:has-text("Join now")',
+async function clickJoinButton(page: Page): Promise<void> {
+  console.log('🔘 Buscando botón para unirse...');
+  
+  try {
+    // Lista de posibles selectores para el botón de unirse
+    const joinButtonSelectors = [
+      'button[aria-label*="Unirse ahora"]',
+      'button[aria-label*="Join now"]', 
+      'button[aria-label*="Solicitar unirse"]',
+      'button[aria-label*="Ask to join"]',
       'button:has-text("Unirse ahora")',
-      'div[role="button"]:has-text("Ask to join")',
-      'div[role="button"]:has-text("Pedir unirse")',
+      'button:has-text("Join now")',
+      'button:has-text("Solicitar unirse")',
       'button:has-text("Ask to join")',
-      'button:has-text("Pedir unirse")',
-      '[data-promo-anchor-id="join"]',
-      '[jsname="Qx7uuf"]', // Selector específico conocido
-      'div[role="button"][aria-label*="join" i]',
-      'button[aria-label*="join" i]',
-      'div[role="button"][aria-label*="unirse" i]',
-      'button[aria-label*="unirse" i]'
+      '[data-mdc-dialog-action="ok"]',
+      '[role="button"]:has-text("Unirse")',
+      '[role="button"]:has-text("Join")'
     ];
 
-    // Esperar a que aparezca algún botón de unirse
-    for (let attempt = 0; attempt < 3; attempt++) {
-      for (const selector of joinSelectors) {
-        try {
-          const button = await this.page.$(selector);
-          if (button) {
-            const isVisible = await button.isVisible();
-            if (isVisible) {
-              await button.click();
-              console.log('✅ Botón de unirse presionado');
-              await this.page.waitForTimeout(2000); // Esperar a que se procese
-              return;
-            }
-          }
-        } catch (error) {
-          // Continuar con el siguiente selector
-          continue;
-        }
-      }
-      
-      // Si no encontramos nada, esperar un poco más
-      console.log(`   ⏳ Intento ${attempt + 1}/3 - Esperando botón de unirse...`);
-      await this.page.waitForTimeout(3000);
-    }
-
-    // Si no se encuentra el botón, intentar con Enter o buscar por texto
-    console.log('⚠️ No se encontró botón específico, intentando métodos alternativos...');
+    let buttonFound = false;
     
-    try {
-      // Método alternativo: buscar por texto
-      await this.page.click('text="Join now"', { timeout: 5000 });
-      console.log('✅ Unido usando texto "Join now"');
-      return;
-    } catch {}
-
-    try {
-      await this.page.click('text="Unirse ahora"', { timeout: 5000 });
-      console.log('✅ Unido usando texto "Unirse ahora"');
-      return;
-    } catch {}
-
-    // Último recurso: Enter
-    console.log('⚠️ Intentando con Enter como último recurso...');
-    await this.page.keyboard.press('Enter');
-    await this.page.waitForTimeout(2000);
-  }
-
-  private async waitForJoinConfirmation(): Promise<void> {
-    console.log('⏳ Esperando confirmación de unión...');
-
-    try {
-      // Selectores modernos para confirmar que estamos en la reunión
-      const confirmationSelectors = [
-        'div[role="button"][aria-label*="leave call" i]',
-        'div[role="button"][aria-label*="end call" i]',
-        'div[role="button"][aria-label*="salir" i]',
-        'button[aria-label*="leave call" i]',
-        'button[aria-label*="end call" i]',
-        'button[aria-label*="salir" i]',
-        '[data-tooltip*="leave call" i]',
-        '[data-tooltip*="end call" i]',
-        '[data-tooltip*="salir" i]',
-        '.call-controls',
-        '[data-call-ended="false"]',
-        '[jsname="CQylAd"]', // Selector específico del botón salir
-        'div[role="button"][data-tooltip*="Leave call"]',
-        'div[role="button"][data-tooltip*="Hang up"]'
-      ];
-
-      // Esperar con múltiples intentos
-      let confirmed = false;
-      for (let attempt = 0; attempt < 6; attempt++) { // 6 intentos = 30 segundos
-        for (const selector of confirmationSelectors) {
-          try {
-            const element = await this.page.$(selector);
-            if (element) {
-              const isVisible = await element.isVisible();
-              if (isVisible) {
-                console.log(`✅ Confirmación de unión recibida (selector: ${selector})`);
-                confirmed = true;
-                break;
-              }
-            }
-          } catch (error) {
-            // Continuar con el siguiente selector
-            continue;
-          }
-        }
-        
-        if (confirmed) break;
-        
-        // Verificar si estamos en la URL correcta de la reunión
-        const currentUrl = this.page.url();
-        if (currentUrl.includes('meet.google.com') && !currentUrl.includes('preview')) {
-          console.log('✅ Confirmación por URL - estamos en la reunión');
-          confirmed = true;
+    for (const selector of joinButtonSelectors) {
+      try {
+        const button = page.locator(selector);
+        if (await button.isVisible({ timeout: 2000 })) {
+          await button.click();
+          console.log(`✅ Botón de unirse presionado (${selector})`);
+          buttonFound = true;
           break;
         }
-        
-        console.log(`   ⏳ Intento ${attempt + 1}/6 - Esperando confirmación...`);
-        await this.page.waitForTimeout(5000);
+      } catch (e) {
+        // Continuar con el siguiente selector
       }
-
-      if (!confirmed) {
-        // Verificar si hay mensajes de error específicos
-        const errorMessages = await this.page.$$eval('text=/meeting.*ended|reunion.*terminada|not.*found|no.*encontrada/i', 
-          elements => elements.map(el => el.textContent));
-        
-        if (errorMessages.length > 0) {
-          throw new Error(`Meeting error: ${errorMessages[0]}`);
-        }
-        
-        throw new Error('Could not confirm meeting join - timeout reached');
-      }
-
-      // Esperar un poco más para asegurar que la página esté estable
-      await this.page.waitForTimeout(3000);
-      console.log('✅ Unión confirmada y página estable');
-
-    } catch (error) {
-      console.error('❌ No se pudo confirmar la unión a la reunión:', (error as Error).message);
-      
-      // Información de debug
-      const currentUrl = this.page.url();
-      console.log(`   Debug - URL actual: ${currentUrl}`);
-      
-      // Verificar si la página sigue activa
-      try {
-        await this.page.title();
-      } catch (pageError) {
-        console.log('   Debug - La página se cerró o no responde');
-      }
-      
-      throw new Error('Failed to confirm meeting join');
     }
+
+    if (!buttonFound) {
+      // Último intento: buscar cualquier botón que contenga texto relacionado
+      const fallbackButton = page.locator('button').filter({ hasText: /unir|join|solicitar|ask/i });
+      if (await fallbackButton.first().isVisible({ timeout: 2000 })) {
+        await fallbackButton.first().click();
+        console.log('✅ Botón de unirse encontrado (fallback)');
+        buttonFound = true;
+      }
+    }
+
+    if (!buttonFound) {
+      throw new Error('No se encontró el botón para unirse a la reunión');
+    }
+
+    // Esperar un poco después de hacer clic
+    await page.waitForTimeout(2000);
+
+  } catch (error) {
+    console.error('❌ Error haciendo clic en botón de unirse:', error);
+    throw error;
   }
+}
 
-  // Método para verificar si necesita permiso para unirse
-  async needsPermissionToJoin(): Promise<boolean> {
-    try {
-      const permissionIndicators = await this.page.$$([
-        'text="Waiting for the host"',
-        'text="Esperando al anfitrión"',
-        'text="Ask to join"',
-        'text="Pedir unirse"'
-      ].join(', '));
-
-      return permissionIndicators.length > 0;
-    } catch (error) {
-      return false;
-    }
-  }
-
-  // Método para manejar casos donde se necesita permiso
-  async handlePermissionRequest(): Promise<void> {
-    if (await this.needsPermissionToJoin()) {
-      console.log('🚪 Se requiere permiso para unirse, enviando solicitud...');
+async function waitForJoinConfirmation(page: Page): Promise<void> {
+  console.log('⏳ Esperando confirmación de unión...');
+  
+  try {
+    // Esperar múltiples indicadores de que estamos en la reunión
+    await Promise.race([
+      /* // Opción 1: URL cambia para indicar que estamos en la reunión
+      page.waitForFunction(() => {
+        return window.location.href.includes('/meet.google.com/') && 
+               !window.location.href.includes('authuser') &&
+               document.querySelector('[data-meeting-title], [aria-label*="reunion"], [aria-label*="meeting"]');
+      }, { timeout: 15000 }), */
       
-      try {
-        const askButton = await this.page.waitForSelector(
-          'button:has-text("Ask to join"), button:has-text("Pedir unirse")',
-          { timeout: 5000 }
-        );
-        
-        if (askButton) {
-          await askButton.click();
-          console.log('📨 Solicitud de unión enviada');
-        }
-      } catch (error) {
-        console.log('⚠️ No se pudo enviar solicitud de unión automáticamente');
+      /* // Opción 2: Aparecen controles de la reunión
+      page.waitForSelector([
+        '[aria-label*="Activar micrófono"]',
+        '[aria-label*="Turn on microphone"]',
+        '[data-tooltip*="micrófono"]',
+        '[data-tooltip*="microphone"]',
+        '.wnPUne', // Clase de controles de Google Meet
+        '[data-is-muted]'
+      ].join(', '), { timeout: 15000 }), */
+      
+      // Opción 3: Aparece el área de participantes
+      page.waitForSelector([
+        '[aria-label*="Mostrar participantes"]',
+        '[aria-label*="Show everyone"]',
+        '[data-tab-id="1"]', // Tab de participantes
+        '[aria-label*="People"]',
+        '[aria-label*="Personas"]',
+      ].join(', '), { timeout: 15000 }),
+      
+      // Opción 4: Aparece el botón de Leave
+      page.waitForSelector([
+        '[aria-label*="Salir de la llamada"]',
+        '[aria-label*="Leave call"]',
+      ].join(', '), { timeout: 15000 })
+    ]);
+
+    // Verificación adicional: comprobar que realmente estamos en la reunión
+    const inMeeting = await page.evaluate(() => {
+      // Buscar indicadores de que estamos en una reunión activa
+      const meetingIndicators = [
+        document.querySelector('[data-meeting-title]'),
+        document.querySelector('[aria-label*="Salir de la llamada"]'),
+        document.querySelector('[aria-label*="Leave call"]'),
+        document.querySelector('[data-is-muted]'),
+        document.querySelector('.wnPUne'), // Controles de Google Meet
+        document.querySelector('[data-tab-id]') // Tabs de la reunión
+      ];
+      
+      return meetingIndicators.some(indicator => indicator !== null);
+    });
+
+    if (inMeeting) {
+      console.log('✅ Confirmación exitosa - estamos en la reunión');
+    } else {
+      console.log('⚠️ Confirmación parcial - verificando estado...');
+      
+      // Intentar una verificación adicional esperando un poco más
+      await page.waitForTimeout(3000);
+      
+      const urlCheck = await page.url();
+      if (urlCheck.includes('meet.google.com') && !urlCheck.includes('authuser')) {
+        console.log('✅ Confirmación por URL - estamos en la reunión');
+      } else {
+        throw new Error('No se pudo confirmar la unión a la reunión');
       }
     }
+
+    // Esperar un poco más para asegurar que la página esté completamente cargada
+    await page.waitForTimeout(2000);
+    console.log('✅ Unión confirmada y página estable');
+
+  } catch (error) {
+    console.error('❌ Error esperando confirmación de unión:', error);
+    
+    // Diagnóstico adicional
+    const currentUrl = await page.url();
+    console.log('URL actual:', currentUrl);
+    
+    const pageTitle = await page.title();
+    console.log('Título de página:', pageTitle);
+    
+    throw new Error(`No se pudo confirmar la unión a la reunión. URL: ${currentUrl}`);
   }
 }

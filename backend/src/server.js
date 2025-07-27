@@ -7,7 +7,7 @@ const { createClient } = require('@supabase/supabase-js');
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Configurar middleware
 app.use(cors());
@@ -25,6 +25,16 @@ app.get('/api/health', (req, res) => {
     status: 'OK', 
     message: 'Backend funcionando correctamente',
     timestamp: new Date().toISOString()
+  });
+});
+
+// Health endpoint for Chrome extension
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'TOTS Meet Assistant Backend is running',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
   });
 });
 
@@ -83,6 +93,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🗄️  Test DB: http://localhost:${PORT}/api/test-db`);
+  console.log(`🤖 Bot endpoints: http://localhost:${PORT}/api/meetings`);
 });
 
 module.exports = app;

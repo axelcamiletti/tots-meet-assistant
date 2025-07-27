@@ -30,11 +30,15 @@ class RecordingModule extends events_1.EventEmitter {
         this.isRecording = isRecording;
         if (isRecording && !this.recordingStartTime) {
             this.recordingStartTime = new Date();
-            this.emit('recordingStarted');
+            this.emit('recordingStarted', {
+                timestamp: this.recordingStartTime,
+                config: this.config
+            });
         }
         else if (!isRecording && this.recordingStartTime) {
+            const duration = this.getRecordingDuration();
             this.emit('recordingStopped', {
-                duration: this.getRecordingDuration(),
+                duration,
                 startTime: this.recordingStartTime
             });
             this.recordingStartTime = null;

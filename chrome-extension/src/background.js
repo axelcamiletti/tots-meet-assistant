@@ -31,6 +31,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
+  
+  if (request.action === 'startRecording') {
+    handleStartRecording(request.meetingId)
+      .then(response => sendResponse({ success: true, data: response }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+  
+  if (request.action === 'stopRecording') {
+    handleStopRecording(request.meetingId)
+      .then(response => sendResponse({ success: true, data: response }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
 });
 
 // Iniciar bot
@@ -71,6 +85,38 @@ async function handleTestConnection() {
   console.log('🔍 Testing server connection...');
   
   const response = await fetch(`${BOT_SERVER_URL}/health`);
+  
+  if (!response.ok) {
+    throw new Error(`Server returned ${response.status}`);
+  }
+  
+  return await response.json();
+}
+
+// Iniciar grabación
+async function handleStartRecording(meetingId) {
+  console.log('🔴 Starting recording for meeting:', meetingId);
+  
+  const response = await fetch(`${BOT_SERVER_URL}/api/meetings/${meetingId}/recording/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Server returned ${response.status}`);
+  }
+  
+  return await response.json();
+}
+
+// Detener grabación
+async function handleStopRecording(meetingId) {
+  console.log('⏹️ Stopping recording for meeting:', meetingId);
+  
+  const response = await fetch(`${BOT_SERVER_URL}/api/meetings/${meetingId}/recording/stop`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
   
   if (!response.ok) {
     throw new Error(`Server returned ${response.status}`);

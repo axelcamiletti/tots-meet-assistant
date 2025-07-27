@@ -2,12 +2,14 @@ import { Page } from 'playwright';
 import { BaseBot } from '../core/base-bot';
 import { BotConfig } from '../types/bot.types';
 import { GoogleMeetJoinModule } from './google-meet/join';
-import { GoogleMeetTranscriptionModule } from './google-meet/transcription';
+import { WhisperTranscriptionModule } from '../modules/whisper-transcription-module';
+import { GoogleMeetRecordingModule } from './google-meet/recording';
 import { GoogleMeetMonitoringModule } from './google-meet/monitoring';
 
 export class GoogleMeetBot extends BaseBot {
   private joinModule: GoogleMeetJoinModule | null = null;
-  private transcriptionModule: GoogleMeetTranscriptionModule | null = null;
+  private transcriptionModule: WhisperTranscriptionModule | null = null;
+  private recordingModule: GoogleMeetRecordingModule | null = null;
   private monitoringModule: GoogleMeetMonitoringModule | null = null;
 
   constructor(config: BotConfig) {
@@ -51,8 +53,8 @@ export class GoogleMeetBot extends BaseBot {
 
     console.log('🔧 Inicializando módulos del bot...');
 
-    // Inicializar transcripción
-    await this.initializeTranscription();
+    // Inicializar grabación y transcripción con Whisper
+    await this.initializeRecordingAndTranscription();
 
     // Inicializar monitoreo
     await this.initializeMonitoring();
@@ -60,38 +62,82 @@ export class GoogleMeetBot extends BaseBot {
     console.log('✅ Módulos inicializados');
   }
 
-  private async initializeTranscription(): Promise<void> {
+  private async initializeRecordingAndTranscription(): Promise<void> {
     if (!this.page) return;
 
     try {
-      console.log('🎤 Inicializando módulo de transcripción...');
+      console.log('� Inicializando grabación y transcripción con Whisper...');
       
-      this.transcriptionModule = new GoogleMeetTranscriptionModule(this.page, {
-        enableAutomatic: true,
-        enableLiveCaption: true,
-        language: 'es-ES',
-        interval: 2000
+      // Inicializar módulo de grabación
+      this.recordingModule = new GoogleMeetRecordingModule(this.page, {
+        enableVideo: true,
+        enableAudio: true,
+        quality: 'medium',
+        format: 'mp4'
       });
 
-      // Configurar eventos
-      this.transcriptionModule.on('transcriptionAdded', (entry) => {
+      // Inicializar módulo de transcripción Whisper
+      this.transcriptionModule = new WhisperTranscriptionModule(this.page, {
+        apiKey: process.env.OPENAI_API_KEY || '',
+        model: 'gpt-4o-transcribe',
+        language: 'es',
+        prompt: 'Esta es una reunión de negocios en español. Por favor transcribe con precisión los nombres propios y términos técnicos.'
+      });
+
+      // Configurar eventos de grabación
+      this.recordingModule.on('recordingStarted', (info: any) => {
+        console.log('🎬 Grabación iniciada:', info);
+        this.emit('recordingStarted', info);
+      });
+
+      this.recordingModule.on('recordingStopped', (info: any) => {
+        console.log('⏹️ Grabación detenida:', info);
+        this.emit('recordingStopped', info);
+      });
+
+      this.recordingModule.on('recordingCompleted', async (result: any) => {
+        console.log('✅ Grabación completada:', result);
+        
+        // Procesar audio con Whisper si existe
+        if (result.audioPath && result.success) {
+          try {
+            console.log('🎵 Procesando audio con Whisper...');
+            await this.transcriptionModule?.transcribeAudioFile(result.audioPath);
+            
+            // Cleanup del archivo de audio después del procesamiento
+            await this.transcriptionModule?.cleanupAudioFile();
+            
+            this.emit('transcriptionCompleted', this.transcriptionModule?.getTranscriptions());
+          } catch (error) {
+            console.error('❌ Error procesando audio con Whisper:', error);
+            this.emit('transcriptionError', error);
+          }
+        }
+        
+        this.emit('recordingCompleted', result);
+      });
+
+      // Configurar eventos de transcripción
+      this.transcriptionModule.on('transcriptionAdded', (entry: any) => {
         this.sessionManager.addTranscriptionEntry(entry);
         this.emit('transcriptionUpdate', entry);
       });
 
-      this.transcriptionModule.on('error', (error) => {
-        console.error('Error en transcripción:', error);
+      this.transcriptionModule.on('error', (error: any) => {
+        console.error('Error en transcripción Whisper:', error);
         this.emit('transcriptionError', error);
       });
 
-      // Iniciar transcripción
+      // Iniciar grabación automáticamente
+      await this.recordingModule.startRecording();
       await this.transcriptionModule.startTranscription();
+      
       this.sessionManager.updateSessionStatus('recording');
       
-      console.log('✅ Módulo de transcripción iniciado');
+      console.log('✅ Grabación y transcripción iniciadas');
     } catch (error) {
-      console.error('❌ Error inicializando transcripción:', error);
-      // No lanzar error para que el bot pueda continuar sin transcripción
+      console.error('❌ Error inicializando grabación y transcripción:', error);
+      // No lanzar error para que el bot pueda continuar
     }
   }
 
@@ -131,22 +177,37 @@ export class GoogleMeetBot extends BaseBot {
     }
   }
 
-  // Métodos públicos para transcripción
-  async toggleTranscription(enable: boolean): Promise<void> {
-    if (!this.transcriptionModule) {
-      console.log('⚠️ Módulo de transcripción no inicializado');
+  // Métodos públicos para grabación y transcripción
+  async toggleRecording(enable: boolean): Promise<void> {
+    if (!this.recordingModule) {
+      console.log('⚠️ Módulo de grabación no inicializado');
       return;
     }
 
-    if (enable && !this.transcriptionModule.isTranscribing()) {
-      await this.transcriptionModule.startTranscription();
+    if (enable && !this.recordingModule.isRecordingActive()) {
+      await this.recordingModule.startRecording();
       this.sessionManager.updateSessionStatus('recording');
-      console.log('✅ Transcripción habilitada');
-    } else if (!enable && this.transcriptionModule.isTranscribing()) {
-      await this.transcriptionModule.stopTranscription();
+      console.log('✅ Grabación habilitada');
+    } else if (!enable && this.recordingModule.isRecordingActive()) {
+      const result = await this.recordingModule.stopRecording();
       this.sessionManager.updateSessionStatus('joined');
-      console.log('⏸️ Transcripción pausada');
+      
+      // Procesar audio con Whisper automáticamente
+      if (result.audioPath && result.success && this.transcriptionModule) {
+        try {
+          await this.transcriptionModule.transcribeAudioFile(result.audioPath);
+          console.log('✅ Audio procesado con Whisper');
+        } catch (error) {
+          console.error('❌ Error procesando audio:', error);
+        }
+      }
+      
+      console.log('⏸️ Grabación detenida');
     }
+  }
+
+  async toggleTranscription(enable: boolean): Promise<void> {
+    console.log('ℹ️ Transcripción está integrada con grabación. Use toggleRecording() en su lugar.');
   }
 
   getTranscriptions() {
@@ -167,6 +228,19 @@ export class GoogleMeetBot extends BaseBot {
 
   exportTranscriptionToJSON(): string {
     return this.transcriptionModule?.exportToJSON() || '[]';
+  }
+
+  // Métodos para el módulo de grabación
+  getRecordingStats() {
+    return this.recordingModule?.getRecordingStats() || null;
+  }
+
+  isRecordingActive(): boolean {
+    return this.recordingModule?.isRecordingActive() || false;
+  }
+
+  getRecordingDirectory(): string {
+    return this.recordingModule?.getRecordingDirectory() || '';
   }
 
   // Métodos públicos para monitoreo
@@ -243,10 +317,10 @@ export class GoogleMeetBot extends BaseBot {
     console.log('🧹 Limpiando recursos de Google Meet Bot...');
     
     try {
-      // Detener transcripción
-      if (this.transcriptionModule && this.transcriptionModule.isTranscribing()) {
-        await this.transcriptionModule.stopTranscription();
-        console.log('✅ Transcripción detenida');
+      // Detener grabación si está activa
+      if (this.recordingModule && this.recordingModule.isRecordingActive()) {
+        await this.recordingModule.stopRecording();
+        console.log('✅ Grabación detenida');
       }
 
       // Detener monitoreo
@@ -254,6 +328,9 @@ export class GoogleMeetBot extends BaseBot {
         this.monitoringModule.stopMonitoring();
         console.log('✅ Monitoreo detenido');
       }
+
+      // Cleanup de módulos
+      // Los módulos se limpian automáticamente al detener sus procesos
 
       // Cleanup del bot base
       await super.cleanup();
@@ -270,8 +347,13 @@ export class GoogleMeetBot extends BaseBot {
     return {
       ...baseStatus,
       modules: {
+        recording: {
+          active: this.recordingModule?.isRecordingActive() || false,
+          stats: this.recordingModule?.getRecordingStats() || null,
+          directory: this.recordingModule?.getRecordingDirectory() || null
+        },
         transcription: {
-          active: this.transcriptionModule?.isTranscribing() || false,
+          active: false, // Whisper procesa post-reunión
           stats: this.transcriptionModule?.getStats() || null
         },
         monitoring: {

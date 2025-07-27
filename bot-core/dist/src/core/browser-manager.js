@@ -45,9 +45,11 @@ class BrowserManager {
             '--disable-blink-features=AutomationControlled',
             '--disable-web-security',
             '--disable-features=VizDisplayCompositor',
+            // Permisos para micrófono y grabación:
             '--use-fake-ui-for-media-stream',
-            '--use-fake-device-for-media-stream',
             '--allow-running-insecure-content',
+            '--enable-media-stream',
+            '--autoplay-policy=no-user-gesture-required',
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
             '--disable-renderer-backgrounding',
@@ -61,7 +63,11 @@ class BrowserManager {
             '--no-default-browser-check',
             '--disable-sync',
             '--disable-component-update',
-            '--disable-client-side-phishing-detection'
+            '--disable-client-side-phishing-detection',
+            // Agregar permisos para Screen Capture:
+            '--auto-select-desktop-capture-source=Entire screen',
+            '--enable-usermedia-screen-capturing',
+            '--allow-http-screen-capture'
         ];
     }
     configureUserAgent() {
@@ -80,9 +86,13 @@ class BrowserManager {
             if (!this.page)
                 throw new Error('Page no inicializada');
             const context = this.page.context();
+            // Otorgar permisos básicos de media
             yield context.grantPermissions(['microphone', 'camera'], {
                 origin: 'https://meet.google.com'
             });
+            // Configurar permisos para Screen Capture sin mock
+            // Permitir que el usuario real otorgue permisos de captura de pantalla
+            console.log('🎤 Permisos de micrófono configurados automáticamente');
         });
     }
     setupStealth() {

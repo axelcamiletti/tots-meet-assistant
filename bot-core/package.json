@@ -8,7 +8,10 @@
     "start": "node dist/bot.js",
     "dev": "ts-node src/bot.ts",
     "test": "npm run build && node dist/tests/test.js",
-    "test:quick": "npm run build && node dist/tests/test.js --quick"
+    "test:quick": "npm run build && node dist/tests/test.js --quick",
+    "test-transcription": "npm run build && node dist/tests/test-transcription.js",
+    "test-real": "npm run build && node dist/tests/test-real-meeting.js",
+    "test-microphone": "npm run build && node dist/tests/test-microphone.js"
   },
   "dependencies": {
     "playwright": "^1.40.0",
